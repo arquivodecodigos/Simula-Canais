@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Simulação da Lâmina D'Água em Canais Livres - Hidráulica e Fenômenos de Transporte - Planilha Web - Planilhas Online</title>
+  
+  <script type="text/javascript">
+    var largura_inferior = 0.002;
+    var profundidade_escoamento = -1;
+    var profundidade_escoamento_2 = -1;
+    var vazao = 0.005;
+    var largura_topo = 0;
+    var hipotenusa = 0;
+    var graus = 45;
+    var contador = 0;
+    var profundidades = [];
+  
+    var EPSILON = 0.00001; // erro permitido
+
+    // Dados do canal
+    var b = 0; // base menor (m)
+    var h = 0;
+    var Z = 0; // talude lateral (H:V)
+    var n = 0; // coeficiente de Manning
+    var I = 0; // declividade
+    var Q = 0; // vazão desejada (m³/s)
+    var declividade = 0;
+    var inclinacao_talude = 0;
+    var coeficiente_rugosidade = 0;
+    var talude_vertical = 0;
+    var inclinacao_talude_resultado = "";
+    var angulo_graus = 0;
+  
+    function simular() {
+	  profundidade_escoamento = 0;
+	  largura_inferior = document.getElementById("largura_inferior").value.trim();
+	  vazao = document.getElementById("vazao").value.trim();
+	
+	  coeficiente_rugosidade = document.getElementById("coeficiente_rugosidade").value.trim();
+	  declividade = document.getElementById("declividade").value.trim();
+	  var medida = document.getElementById("medida").value.trim();
+	
+	  inclinacao_talude = document.getElementById("inclinacao_talude").value.trim();
+	  talude_vertical = 0;
+	  Z = 0; // Inclinação do talude
+	  inclinacao_talude_resultado = "";
+	  angulo_graus = 0;
+	
+      if ((largura_inferior != "") && (vazao != "") && (inclinacao_talude != "")) {
+	    largura_inferior = parseFloat(largura_inferior.replace(",", "."));
+	    vazao = parseFloat(vazao.replace(",", "."));
+	    coeficiente_rugosidade = parseFloat(coeficiente_rugosidade.replace(",", "."));
+	    declividade = parseFloat(declividade.replace(",", "."));
+	  
+	    b = largura_inferior;
+	    n = coeficiente_rugosidade;
+	    I = declividade;
+	    Q = vazao;
+	  
+	    if (medida == "2") {
+		  declividade = declividade / (1000 * 100);   
+	    }
+	    else if (medida == "3") {
+		  declividade = declividade / 1000.0; // OK  
+	    }
+	    else if (medida == "4") {
+		  declividade = declividade / 100.0; // OK  
+	    }
+	  
+	    // a inclinação do talude foi informada em H:V?
+	    if (inclinacao_talude.includes(":")) {
+	      var dados_inclinacao = inclinacao_talude.split(":"); 
+	      talude_vertical = dados_inclinacao[1].replace(",", ".");
+ 
+          // vamos ler o indicador horizontal do talude em metros
+          Z = dados_inclinacao[0].replace(",", ".");
+        
+          // agora precisamos reduzir o indicador vertical do talude para 1
+          // e ajustamos o indicador horizontal também
+          Z = Z / talude_vertical;
+		  talude_vertical = talude_vertical / talude_vertical;
+		
+          // vamos calcular o raio
+          var raio = Math.sqrt(Math.pow(Z, 2) + Math.pow(talude_vertical, 2));   
+          // agora calculamos o theta (ângulo) em radianos 
+          var theta = Math.atan2(talude_vertical, Z);
+          // queremos o ângulo em graus também
+          angulo_graus = 180 * (theta / Math.PI);
+        
+          inclinacao_talude_resultado = Z.toFixed(4) + "H:" +
+  	        talude_vertical + "V ou " + angulo_graus.toFixed(2) + "º</b>. O valor de inclinação Z do talude é <b>" + Z.toFixed(4) + "</b>";
+	      graus = angulo_graus;
+	    }  		   
+	    else { // a inclinação foi informada em Z
+          var dados_inclinacao = inclinacao_talude; 
+	      talude_vertical = 1.0;
+ 
+          // vamos ler o indicador horizontal do talude em metros
+          Z = dados_inclinacao.replace(",", ".");
+        
+          // agora precisamos reduzir o indicador vertical do talude para 1
+          // e ajustamos o indicador horizontal também
+          Z = Z / talude_vertical;
+		  talude_vertical = talude_vertical / talude_vertical;
+		
+          // vamos calcular o raio
+          var raio = Math.sqrt(Math.pow(Z, 2) + Math.pow(talude_vertical, 2));   
+          // agora calculamos o theta (ângulo) em radianos 
+          var theta = Math.atan2(talude_vertical, Z);
+          // queremos o ângulo em graus também
+          angulo_graus = 180 * (theta / Math.PI);
+        
+          inclinacao_talude_resultado = Z.toFixed(4) + "H:" +
+  	        talude_vertical + "V ou " + angulo_graus.toFixed(2) + "º</b>. O valor de inclinação Z do talude é <b>" + Z.toFixed(4) + "</b>";
+	      graus = angulo_graus;		  
+	    }
+	  
+	    var a1 = 0.0, b1 = 50; // valores iniciais
+        document.getElementById("btn_simular").disabled = true;
+	    profundidade_escoamento_2 = bisecao(a1, b1);
+	    //window.alert(profundidades[profundidades.length - 1]);
+      
+	    // ajusta os valores
+        b = largura_inferior;
+        h = profundidade_escoamento_2;
+	  
+	    myTimeout = setInterval(animar, 700);
+	  
+	    // moví o conteúdo daqui para a simulação
+	  }
+	  else {
+        (document.getElementById("div_resultados")).style.display = 'none';		 
+	  }
+    }
+  
+    // Função que calcula a vazão para uma lâmina y
+    function vazao_m(y) {
+      var A = (b + Z * y) * y;
+      var P = b + 2.0 * y * Math.sqrt(1.0 + Math.pow(Z, 2.0));
+      var R = A / P;
+      var Q = (1.0 / n) * A * (Math.pow(R, 2.0 / 3.0)) * Math.pow(I, 1.0 / 2.0);
+      return Q;
+    }
+  
+    // Função objetivo f(y) = Vazão Calculada - Vazão desejada
+    function f(y) {
+      return vazao_m(y) - Q;
+    }
+  
+    // Método da biseção
+    function bisecao(a, b) {
+      var fa = f(a);
+      var fb = f(b);
+      var mid = 0;
+    
+      if (fa * fb > 0) {
+        window.alert("A função não muda de sinal no intervalo [a, b].");
+        return 0;
+      }  
+    
+	  while ((fb - fa) >= EPSILON) {
+        contador++;
+	  
+	    mid = (a + b) / 2.0;
+        var fmid = f(mid);
+      
+        if (Math.abs(fmid) < EPSILON) {
+          return mid;
+        }
+      
+        if ((fa * fmid) < 0) {
+          b = mid;
+          fb = fmid;
+        }
+        else {
+          a = mid;
+          fa = fmid;
+        }
+  
+        profundidade_escoamento_2 = mid;
+	    h = profundidade_escoamento_2;
+	    profundidades.push(profundidade_escoamento_2);
+	  }
+    
+	  return mid;
+    }
+  
+    var indice = 0;
+    function animar() {
+	  if (indice > (profundidades.length - 1)) {
+        myStopFunction();
+	    return;
+	  }
+	
+	  profundidade_escoamento = profundidades[indice];
+	  h = profundidade_escoamento;
+      //document.getElementById("vazao").value = profundidade_escoamento;
+	
+	  // atualiza os dados na simulação
+      // calcula a área molhada
+	  var am = (b + Z * h) * h;
+	
+	  // agora vamos calcular o perímetro molhado
+      var pm = b + 2 * h * Math.sqrt(1 + Math.pow(Z, 2));
+    
+      // calculamos o raio hidráulico
+      var rh = am / pm;
+	
+	  // calculamos a largura do topo
+      largura_topo = b + (2 * Z * h);
+	
+      // vamos calcular a razão de aspecto
+      var razao_aspecto = b / h;
+      var razao_aspecto_ideal = 2 * Math.sqrt(1 + Math.pow(Z, 2));	  
+	  var fundo_ideal = 2 * h * Math.sqrt(1 + Math.pow(Z, 2));
+	  
+	  // vamos calcular a velocidade
+	  var velocidade = (1 / coeficiente_rugosidade) *
+	    Math.pow(rh, (2 / 3.0)) * Math.pow(declividade, (1 / 2.0));
+	  
+	  // início número de froude
+      var dh = am / largura_topo;
+      var froude = velocidade / Math.sqrt(9.81 * dh);
+	  
+	  document.getElementById("res_froude").innerHTML = "O Número de Froude do Canal é: <b>" +
+	    froude.toFixed(5) + "</b>";
+	  
+	  document.getElementById("res_dh").innerHTML = "A Profundidade Hidráulica do Canal é: <b>" +
+	    dh.toFixed(5) + " m</b>";
+      
+      var tipo_escoamento = "";	  
+	  if (froude < 1) {
+		tipo_escoamento = "Subcrítico (tranquilo). Escoamento lento ou fluvial";   
+	  }
+	  else if (froude == 1) {
+		tipo_escoamento = "Escoamento Crítico.";
+	  }
+	  else {
+		tipo_escoamento = "Escoamento supercrítico (escoamento rápido ou torrencial).";
+	  }
+	  
+	  // vamos calcular a vazão
+	  vazao = (1 / coeficiente_rugosidade) * am *
+	    Math.pow(rh, (2 / 3.0)) * Math.pow(declividade, (1 / 2.0));
+	  
+	  document.getElementById("res_vazao").innerHTML = "A Vazão do Canal é: <b>" +
+	    vazao.toFixed(5) + " m<sup>3</sup>/s</b> ou <b>" + (vazao * 3600).toFixed(5) + " m<sup>3</sup>/h</b> ou <b>" +
+		(vazao * 86400).toFixed(5) + " m<sup>3</sup>/d</b> ou <b>" + (vazao * 1000).toFixed(5) + " L/s</b>" +
+		" ou <b>" + (vazao * 3600000).toFixed(5) + " L/h</b> ou <b>" + (vazao * 86400000).toFixed(5) + " L/d</b>.";	
+	  
+	  document.getElementById("res_tipo_escoamento").innerHTML = "O tipo de escoamento é: <b>" +
+	    tipo_escoamento + "</b>";
+	  
+	  document.getElementById("res_velocidade").innerHTML = "A Velocidade do Escoamento é: <b>" +
+	    velocidade.toFixed(5) + " m/s</b> ou <b>" + (velocidade * 3600.0).toFixed(5) + " m/h</b>"; // 3600	
+	
+	  document.getElementById("res_declividade").innerHTML = "A Declividade do Canal é: <b>" +
+	    declividade.toFixed(5) + " m/m</b> ou <b>" 
+		+ (declividade * (1000 * 100)).toFixed(5) +  " cm/km</b> ou <b>"
+		+ (declividade * 1000).toFixed(5) +  " m/km</b> ou <b>"
+		+ (declividade * 100).toFixed(2) +  "%</b>.";
+	  
+	  document.getElementById("res_pm").innerHTML = "O Perímetro Molhado do Canal é: <b>"
+        + pm.toFixed(5) + " m</b>";
+	  
+	  document.getElementById("res_profundidade").innerHTML = "A Profundidade do Escoamento y é: <b>"
+        + profundidade_escoamento.toFixed(5) + " m</b>";
+	  
+	  document.getElementById("res_am").innerHTML = "A Área Molhada do Canal é: <b>"
+        + am.toFixed(5) + " m<sup>2</sup></b>";
+	  
+	  document.getElementById("res_rh").innerHTML = "O Raio Hidráulico é: <b>"
+        + rh.toFixed(5) + " m</b>";
+	  
+	  document.getElementById("res_largura_topo").innerHTML = "A Largura do Topo do Canal é: <b>"
+        + largura_topo.toFixed(5) + " m</b>";
+	  
+	  document.getElementById("res_inclinacao_talude").innerHTML = "A Inclinação do Talude é: <b>"
+        + inclinacao_talude_resultado + "</b>";
+	  
+	  (document.getElementById("div_resultados")).style.display = 'block';	
+	// fim atualiza os dados na simulação
+	
+	indice++;	
+  }
+  
+  var myTimeout = null;
+
+  function myStopFunction() {
+    clearInterval(myTimeout);
+	document.getElementById("btn_simular").disabled = false;
+	window.alert("Simulação Concluída");
+  }
+</script>
+
+<style type="text/css">
+  body {
+  margin: 0; /* Remove default body margin */
+}
+
+.container {
+  display: flex; /* Activates flexbox on the parent */
+  height: 100vh; /* Makes the container full height of the viewport */
+  width: 100%;
+}
+
+.left-section, .right-section {
+  flex: 1; /* Makes both sections grow equally to fill the container */
+  padding: 20px;
+  box-sizing: border-box; /* Ensures padding/border is included in the width */
+}
+
+.left-section {
+  background-color: white;
+}
+
+.right-section {
+  background-color: white;
+}
+
+form {
+  border-radius: 5px;
+  background-color: white;
+  padding: 0px;
+}
+
+label {display: block;}
+
+input[type=text], select {
+  width: 100%;
+  padding: 12px;
+  margin: 8px 0;
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+input[type=button] {
+  width: 30%;
+  background-color: #4CAF50;
+  color: white;
+  padding: 14px;
+  margin: 8px 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Styles specifically for the disabled state */
+input:disabled,
+button[disabled] {
+  background-color: #cccccc; /* Grey background */
+  color: #666666;             /* Grey text */
+  cursor: not-allowed;        /* Changes cursor to a "not allowed" symbol */
+  opacity: 0.6;               /* Makes it look faded */
+  pointer-events: none;       /* Prevents accidental hover/click events in some cases */
+}
+
+input[type=button]:hover {
+  background-color: #45a049;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+  <div class="left-section">
+    <!-- Content for the left section goes here -->
+    <h2>Simulação da Lâmina D'Água em Canais Livres</h2>
+    
+	<p>Informe os dados solicitadas e observe o resultado no painel à direita.</p>
+	
+	<form onsubmit="return false;" name="calculadora" action="#" method="post">
+      <label for="largura_inferior">Largura Inferior do Canal b (metros)</label>
+	  <input type="text" required name="largura_inferior" value="2" id="largura_inferior">
+	  
+	  <label for="vazao">Vazão</label>
+	  <input type="text" required name="vazao" value="3.47123" id="vazao">
+      
+	  <label for="medida_vazao">Vazão Medida em</label>
+      <select name="medida_vazao" id="medida_vazao">
+        <option value="Ls">L/s</option>
+		<option value="m3s" selected="selected">m³/s</option>
+        <option value="Lh">L/h</option>
+		<option value="m3h">m³/h</option> 					
+      </select>
+      
+      <label for="inclinacao_talude">Inclinação do Talude em H:V (metros) ou Z</label>
+	  <input type="text" required name="inclinacao_talude" value="1.5" id="inclinacao_talude">
+      
+	  <label for="coeficiente_rugosidade">Coeficiente de Rugosidade de Mannning</label>
+	  <input type="text" required name="coeficiente_rugosidade" value="0,015" id="coeficiente_rugosidade">
+      
+	  <label for="declividade">Declividade do Canal</label>
+	  <input type="text" required name="declividade" value="0,001" id="declividade">
+      
+	  <label for="medida">Declividade em</label>
+      <select name="medida" id="medida">
+        <option value="1">Metro/Metro</option>
+		<option value="2">Centímetro/Quilômetro</option>
+		<option value="3">Metro/Quilômetro</option>
+        <option value="4">Porcentagem</option>
+      </select>
+      
+	  <input type="button" onClick="simular()" style="margin-right: 8px" id="btn_simular" value="Iniciar Simulação">
+	  <input type="button" onClick="limpar()" value="Limpar Formulário">
+    </form>
+	
+  </div>
+  <div class="right-section">
+    
+	<h2 class="card-title">Visualização</h2>
+    <div style="overflow: hidden; width: 500px; height: 300px">
+      <Canvas id="plano2d" width="800" height="800"></Canvas>
+    </div>
+	
+	<div id="div_resultados" style="display:none">
+	<h2 class="card-title">Resultados</h2> 
+  
+  <ul style="line-height:170%">
+  
+  <li style="padding-bottom: 10px"><span id="res_profundidade"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_am"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_pm"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_rh"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_largura_topo"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_inclinacao_talude"></span></li>
+  <hr>
+  
+  <li style="margin-bottom: 10px"><span id="res_vazao"></span></li>
+  <hr>
+  
+  <li style="padding-bottom: 10px"><span id="res_velocidade"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_declividade"></span></li>
+  
+  <hr>
+  <li style="padding-bottom: 10px"><span id="res_froude"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_tipo_escoamento"></span></li>
+  <li style="padding-bottom: 10px"><span id="res_dh"></span></li>
+  
+  </ul>
+  </div> 	
+	
+  </div>
+</div>
+
+<script type="text/javascript">
+  function limpar(){
+		
+  }
+</script>
+
+<script type="text/javascript">
+"use strict";
+
+  class Ponto2D {
+	constructor(x, y) {
+      this.x = x;
+	  this.y = y;
+    }     
+  }
+
+  var exibir_resultado = false;
+  var textString = "";
+  var textWidth = 0;
+  var ponto;
+  var linha_offset;
+  
+  var largura_tela = 800;
+  var altura_tela = 800;
+  let canvas = document.getElementById("plano2d");
+  let ctx = canvas.getContext('2d');
+  let cameraOffset = {x: 80, y: -100};
+  let cameraZoom = 1;
+  let MAX_ZOOM = 5;
+  let MIN_ZOOM = 0.1;
+  let SCROLL_SENSITIVITY = 0.0005;
+  var x0 = -20.75;
+  var y0 = 88.1; // 83.1
+  var pos_x, pos_y;  
+   
+  var canvas_x_min = arredondar(0 * largura_tela);
+  var canvas_x_max = arredondar(1 * largura_tela);
+  var canvas_y_min = arredondar((1 - 0.10) * altura_tela);
+  var canvas_y_max = arredondar((1 - 0.90) * altura_tela);
+
+  // calculamos os coeficientes de ajuste de escala para o eixo x
+  var max_x = 30;
+  var min_x = -30;
+  var max_y = 30;
+  var min_y = -30;
+  var ax = (canvas_x_max - canvas_x_min) / (max_x - min_x);
+  var bx = canvas_x_min - ax * min_x;
+  // calculamos os coeficientes de ajuste de escala para o eixo y
+  var ay = (canvas_y_max - canvas_y_min) / (max_y - min_y);
+  var by = canvas_y_min - ay * min_y;   
+   
+  function desenhar(){
+    canvas.width = 800;
+    canvas.height = 800;
+    ctx.setLineDash([]);
+	
+    ctx.translate(largura_tela / 2, altura_tela / 2);
+    ctx.scale(cameraZoom, cameraZoom);
+    ctx.translate(-largura_tela / 2 + cameraOffset.x, altura_tela / 2 + cameraOffset.y);
+    ctx.clearRect(-largura_tela, altura_tela, largura_tela, altura_tela);
+						 
+	ctx.translate(0.5, 0.5);
+	
+   	ctx.strokeStyle = "#f5f5f5";
+	ctx.fillStyle = "#f5f5f5";
+	ctx.lineWidth = 0.5;
+	
+	// desenha as linhas verticais
+	for (var i = -altura_tela * 2; i < altura_tela * 2; i += 53) {
+      ctx.moveTo(-altura_tela * 2, i);
+      ctx.lineTo(largura_tela * 2, i);
+	  ctx.stroke();
+    }
+    
+	// desenha as linhas horizontais
+	for (var i = -largura_tela * 2; i < largura_tela * 2; i += 53) {
+      ctx.moveTo(i, -largura_tela * 2);
+      ctx.lineTo(i, altura_tela * 2);
+      ctx.stroke();
+    }
+	
+	// colocar o código aqui
+	if ((largura_inferior != "") && (profundidade_escoamento > 0)) {
+	  // desenha a linha do fundo do canal
+	  ctx.lineWidth = 3.5;
+	  ctx.beginPath();
+	  ctx.strokeStyle = "black";
+	  ctx.fillStyle = "black";
+	  
+	  var largura_canal = largura_inferior;
+	  var altura_canal = profundidade_escoamento;
+	  var angulo_graus = graus;
+	  
+	  var incremento = 5;
+	  
+	  var x1_fundo_canal = arredondar(ax * x0 + bx) - ((largura_canal * incremento * 10.75) / 2);
+	  var y1_fundo_canal = arredondar(ay * y0 + by);
+	  var x2_fundo_canal = arredondar(ax * x0 + bx) + ((largura_canal * incremento * 10.75) / 2);
+	  var y2_fundo_canal = arredondar(ay * y0 + by);
+	  ctx.moveTo(x1_fundo_canal, y1_fundo_canal);
+      ctx.lineTo(x2_fundo_canal, y2_fundo_canal);
+	  ctx.stroke();
+	  
+	  // cria uma linha imaginária na altura do canal (água)
+	  var x1_altura_canal = arredondar(ax * x0 + bx) - ((largura_canal * 500 * 10.75) / 2);
+	  var y1_altura_canal = arredondar(ay * y0 + by) - (altura_canal * 5 * 10.75);
+	  var x2_altura_canal = arredondar(ax * x0 + bx) + ((largura_canal * 500 * 10.75) / 2);
+	  var y2_altura_canal = arredondar(ay * y0 + by) - (altura_canal * 5 * 10.75);
+	  //ctx.moveTo(x1_altura_canal, y1_altura_canal);
+      //ctx.lineTo(x2_altura_canal, y2_altura_canal);
+	  //ctx.stroke();
+	  
+	  // cria uma linha imaginária na altura do canal (acima do nível da água)
+	  var x1_altura_canal2 = arredondar(ax * x0 + bx) - ((largura_canal * 500 * 10.75) / 2);
+	  var y1_altura_canal2 = arredondar(ay * y0 + by) - (altura_canal * 7 * 10.75);
+	  var x2_altura_canal2 = arredondar(ax * x0 + bx) + ((largura_canal * 500 * 10.75) / 2);
+	  var y2_altura_canal2 = arredondar(ay * y0 + by) - (altura_canal * 7 * 10.75);
+	  //ctx.moveTo(x1_altura_canal2, y1_altura_canal2);
+      //ctx.lineTo(x2_altura_canal2, y2_altura_canal2);
+	  //ctx.stroke();
+	  
+      ctx.lineWidth = 0.5;
+	  // desenha a dimensão do fundo
+      ctx.beginPath();
+	  ctx.strokeStyle = "red";
+	  ctx.fillStyle = "red";
+	  ctx.moveTo(x1_fundo_canal, y1_fundo_canal + 20);
+      ctx.lineTo(x2_fundo_canal, y2_fundo_canal + 20);
+	  ctx.stroke();
+	  
+	  // para desenhar os "x" nas dimensões
+	  ctx.font = "normal 20px arial";
+	  textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, x1_fundo_canal - 5, y1_fundo_canal + 25);
+      textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, x2_fundo_canal - 5, y2_fundo_canal + 25);
+	  
+	  // fim linha do fundo do canal
+	  
+	  // cria as linhas dos taludes
+	  ctx.lineWidth = 3.5;
+	  ctx.beginPath();
+	  ctx.strokeStyle = "black";
+	  ctx.fillStyle = "black";
+	  
+	  // lado direito do talude
+	  angulo_graus = 360 - angulo_graus;
+      // convertemos de graus para radianos
+      var angulo_rad = angulo_graus * (Math.PI / 180);
+	  pos_x = x2_fundo_canal + 4000 * Math.cos(angulo_rad);
+      pos_y = y2_fundo_canal + 4000 * Math.sin(angulo_rad);
+	  
+	  ponto = intersecao(x1_altura_canal2, y1_altura_canal2, x2_altura_canal2,
+	    y2_altura_canal2, x2_fundo_canal, y2_fundo_canal, pos_x, pos_y);
+	  //ctx.fillRect(ponto.x, ponto.y, 10, 10);
+	  ctx.moveTo(x2_fundo_canal, y2_fundo_canal);
+      //ctx.lineTo(pos_x, pos_y);
+	  ctx.lineTo(ponto.x, ponto.y);
+	  ctx.stroke();
+      
+	  ctx.moveTo(ponto.x, ponto.y);
+	  ctx.lineTo(ponto.x + 70, ponto.y);
+	  ctx.stroke();
+	  
+	  ponto = intersecao(x1_altura_canal, y1_altura_canal, x2_altura_canal,
+	    y2_altura_canal, x2_fundo_canal, y2_fundo_canal, pos_x, pos_y);
+	  var ponto_superior_direito = ponto;
+	  // fim lado direito do talude
+	  
+      // lado esquerdo do talude	  
+	  angulo_graus = 180 - angulo_graus;
+      // convertemos de graus para radianos
+      var angulo_rad = angulo_graus * (Math.PI / 180);
+	  pos_x = x1_fundo_canal + 400 * Math.cos(angulo_rad);
+      pos_y = y1_fundo_canal + 400 * Math.sin(angulo_rad);
+	  
+	  ponto = intersecao(x1_altura_canal2, y1_altura_canal2, x2_altura_canal2,
+	    y2_altura_canal2, x1_fundo_canal, y1_fundo_canal, pos_x, pos_y);
+	  //ctx.fillRect(ponto.x, ponto.y, 10, 10);
+	  ctx.moveTo(x1_fundo_canal, y1_fundo_canal);
+      ctx.lineTo(ponto.x, ponto.y);
+	  ctx.stroke();
+	  
+	  ctx.moveTo(ponto.x, ponto.y);
+	  ctx.lineTo(ponto.x - 70, ponto.y);
+	  ctx.stroke();
+	  
+	  ponto = intersecao(x1_altura_canal, y1_altura_canal, x2_altura_canal,
+	    y2_altura_canal, x1_fundo_canal, y1_fundo_canal, pos_x, pos_y);
+	  var ponto_superior_esquerdo = ponto;
+	  // fim lado esquerdo do talude
+	  
+	  // preenche a área de água
+	  ctx.lineWidth = 1.5;
+	  ctx.beginPath();
+      ctx.moveTo(x1_fundo_canal, y1_fundo_canal);
+      ctx.lineTo(x2_fundo_canal, y2_fundo_canal);
+      ctx.lineTo(ponto_superior_direito.x, ponto_superior_direito.y);
+      ctx.lineTo(ponto_superior_esquerdo.x, ponto_superior_esquerdo.y);
+      ctx.lineTo(x1_fundo_canal, y1_fundo_canal);
+      ctx.closePath();
+      ctx.fillStyle = "#bbdefb";
+      ctx.fill();
+	  
+	  ctx.lineWidth = 3.5;
+	  ctx.beginPath();
+	  ctx.strokeStyle = "black";
+	  ctx.fillStyle = "black";
+	  ctx.moveTo(x2_fundo_canal, y2_fundo_canal);
+	  ctx.lineTo(ponto_superior_direito.x, ponto_superior_direito.y);
+	  ctx.moveTo(x1_fundo_canal, y1_fundo_canal);
+      ctx.lineTo(x2_fundo_canal, y2_fundo_canal);
+	  ctx.moveTo(ponto_superior_esquerdo.x, ponto_superior_esquerdo.y);
+      ctx.lineTo(x1_fundo_canal, y1_fundo_canal);
+	  ctx.stroke();
+	  // fim preencher a área de água
+	  
+	  // desenha a dimensão do topo
+	  ctx.lineWidth = 0.5;
+      ctx.beginPath();
+	  ctx.strokeStyle = "red";
+	  ctx.fillStyle = "red";
+	  ctx.moveTo(ponto_superior_esquerdo.x, ponto_superior_esquerdo.y - 15);
+      ctx.lineTo(ponto_superior_direito.x, ponto_superior_direito.y - 15);
+	  ctx.stroke();
+	  
+	  // para desenhar os "x" nas dimensões
+	  ctx.font = "normal 20px arial";
+	  textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, ponto_superior_esquerdo.x - 5, ponto_superior_esquerdo.y - 10);
+      textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, ponto_superior_direito.x - 5, ponto_superior_direito.y - 10);
+	  // fim desenhar a dimensão do topo
+	  
+	  // linha de dimensão offset no talude direito
+	  var linha_offset = {from: {x: ponto_superior_direito.x, y: ponto_superior_direito.y},
+        to: {x: x2_fundo_canal, y: y2_fundo_canal}, style: {strokeStyle: "red", lineWidth: 0.5}};
+	  var pontos_dimensao = drawLine(linha_offset, 20, true);
+	  
+	  // para desenhar os "x" nas dimensões
+	  ctx.font = "normal 20px arial";
+	  textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, pontos_dimensao[0].x, pontos_dimensao[0].y);
+      textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, pontos_dimensao[1].x, pontos_dimensao[1].y);
+	  
+	  ctx.font = "normal 17px arial";
+	  
+	  hipotenusa = Math.sqrt(Math.pow(((parseFloat(largura_topo) - parseFloat(largura_inferior)) / 2), 2) +
+	    Math.pow(parseFloat(profundidade_escoamento), 2));
+	  textString = hipotenusa.toFixed(2);
+      
+	  textWidth = ctx.measureText(textString ).width;
+      linha_offset = {from: {x: pontos_dimensao[0].x, y: pontos_dimensao[0].y},
+        to: {x: pontos_dimensao[1].x, y: pontos_dimensao[1].y}, style: {strokeStyle: "red", lineWidth: 0}};
+	  pontos_dimensao = drawLine(linha_offset, 20, false);
+	  pontos_dimensao = midpoint(new Ponto2D(pontos_dimensao[0].x, pontos_dimensao[0].y),
+     	new Ponto2D(pontos_dimensao[1].x, pontos_dimensao[1].y));
+	  ctx.fillText(textString, pontos_dimensao[0], pontos_dimensao[1]);
+	  pontos_dimensao = midpoint(new Ponto2D(x1_fundo_canal, y1_fundo_canal),
+     	new Ponto2D(x2_fundo_canal, y2_fundo_canal));
+	  textString = (parseFloat(largura_inferior)).toFixed(2);
+      textWidth = ctx.measureText(textString ).width;
+	  ctx.fillText(textString, pontos_dimensao[0] - (textWidth / 2), pontos_dimensao[1] + 45);
+	  pontos_dimensao = midpoint(new Ponto2D(x1_altura_canal, y1_altura_canal),
+     	new Ponto2D(x2_altura_canal, y2_altura_canal));
+	  textString = (parseFloat(largura_topo)).toFixed(2);
+      textWidth = ctx.measureText(textString ).width;
+	  ctx.fillText(textString, pontos_dimensao[0] - (textWidth / 2), pontos_dimensao[1] - 30);
+	  
+	  // desenha a dimensão do topo
+	  ctx.lineWidth = 0.5;
+      ctx.beginPath();
+	  ctx.strokeStyle = "red";
+	  ctx.fillStyle = "red";
+	  ctx.moveTo(ponto_superior_esquerdo.x - 22, ponto_superior_esquerdo.y);
+      ctx.lineTo(ponto_superior_esquerdo.x - 22, y1_fundo_canal);
+	  ctx.stroke();
+	  
+	  // para desenhar os "x" nas dimensões
+	  ctx.font = "normal 20px arial";
+	  textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, ponto_superior_esquerdo.x - 22 - 5, ponto_superior_esquerdo.y + 10);
+      textString = "x";
+      textWidth = ctx.measureText(textString ).width;
+      ctx.fillText(textString, ponto_superior_esquerdo.x - 22 - 5, y1_fundo_canal + 10);
+	  
+	  ctx.font = "normal 17px arial";
+	  pontos_dimensao = midpoint(new Ponto2D(ponto_superior_esquerdo.x - 22, ponto_superior_esquerdo.y),
+     	new Ponto2D(ponto_superior_esquerdo.x - 22, y1_fundo_canal));
+	  textString = (parseFloat(profundidade_escoamento)).toFixed(2);
+      textWidth = ctx.measureText(textString ).width;
+	  ctx.fillText(textString, pontos_dimensao[0] - textWidth - 10, pontos_dimensao[1] + 12);
+	  // fim desenhar a dimensão do topo
+	}
+	
+	requestAnimationFrame(desenhar);
+  }	
+  
+  function midpoint(point1, point2) {
+    const x = (point1.x + point2.x) / 2;
+    const y = (point1.y + point2.y) / 2;
+    return [x, y];
+  }
+  
+  function drawLine(line, offset = 0, desenhar = false) {
+    var [ox, oy] = [0, 0];  
+    Object.assign(ctx, line.style);
+    if (offset) {
+        const [dx, dy] = [line.from.x - line.to.x, line.from.y - line.to.y];
+        const scale = offset / (dx * dx + dy * dy) ** 0.5;
+        [ox, oy] = [-dy * scale, dx * scale];
+    }
+    
+	if (desenhar) {
+	  ctx.beginPath();
+      ctx.lineTo(ox + line.from.x, oy + line.from.y);
+      ctx.lineTo(ox + line.to.x, oy + line.to.y);
+      ctx.stroke();
+	}
+	
+	return [new Ponto2D(ox + line.from.x, oy + line.from.y),
+	  new Ponto2D(ox + line.to.x, oy + line.to.y)];
+  }
+  
+  // inícia o desenho
+  desenhar();   
+  
+  function drawLineWithArrows(contexto, x0, y0, x1, y1, aWidth, aLength, arrowStart, arrowEnd){
+    var dx = x1 - x0;
+    var dy = y1 - y0;
+    var angle = Math.atan2(dy, dx);
+    var length = Math.sqrt(dx * dx + dy * dy);
+    
+    contexto.translate(x0, y0);
+    contexto.rotate(angle);
+    contexto.beginPath();
+    contexto.moveTo(0, 0);
+    contexto.lineTo(length, 0);
+    
+	if(arrowStart){
+      contexto.moveTo(aLength, -aWidth);
+      contexto.lineTo(0, 0);
+      contexto.lineTo(aLength, aWidth);
+    }
+    
+	if(arrowEnd){
+      contexto.moveTo(length - aLength, -aWidth);
+      contexto.lineTo(length, 0);
+      contexto.lineTo(length - aLength, aWidth);
+    }
+    contexto.stroke();
+    contexto.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  
+  function arredondar(valor) {
+    return Math.floor(valor + 0.5) | 0;
+  }
+  
+  function intersecao(a, b, c, d, e, f, g, h) {
+    // vamos construir os quatro pontos
+    var A = new Ponto2D(a, b);
+    var B = new Ponto2D(c, d);
+    var C = new Ponto2D(e, f);
+    var D = new Ponto2D(g, h);
+     
+    // vamos obter a representação do segmento AB    
+    var a1 = B.y - A.y;
+    var b1 = A.x - B.x;
+    var c1 = (a1 * A.x) + (b1 * A.y);
+        
+    // vamos obter a representação do segmento CD
+    var a2 = D.y - C.y;
+    var b2 = C.x - D.x;
+    var c2 = (a2 * C.x) + (b2 * C.y);
+	
+    // obtém o determinante
+    var determinante = (a1 * b2) - (a2 * b1);
+     
+    // e construímos o ponto de intersecção
+    var x = ((b2 * c1) - (b1 * c2)) / determinante;
+    var y = ((a1 * c2) - (a2 * c1)) / determinante;
+    var ponto = new Ponto2D(x, y);
+	return ponto;
+  }
+</script>
+
+</body>
+</html>
