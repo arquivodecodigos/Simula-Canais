@@ -7,7 +7,7 @@ ALUNOS:
 
 ORIENTADOR:
 
-Felipe Corrêa Veloso dos Santos - Professor Orientador, Escola Politécnica e de Artes, Pontifícia Universidade Católica de Goiás.
+1. Felipe Corrêa Veloso dos Santos - Professor Orientador, Escola Politécnica e de Artes, Pontifícia Universidade Católica de Goiás.
 
 DESCRIÇÃO DETALHADA:
 
